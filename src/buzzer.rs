@@ -217,7 +217,7 @@ impl<TIM: CaptureCompare16bitInstance> Buzzer<TIM> {
     }
 
     pub fn set_warning_tone(&mut self, frequency: f32, duration: u32) {
-        self.warning_note = Note::frequency(frequency, duration);
+        self.warning_note = Note::frequency(f32::min(f32::max(frequency, 300.0), 1500.0), duration);
     }
 
     pub fn tick(&mut self, time: u32) {
