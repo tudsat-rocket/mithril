@@ -688,6 +688,7 @@ dependencies = [
  "postcard",
  "rand",
  "rand_chacha",
+ "rouille",
  "serde",
  "siphasher",
  "static_cell",
@@ -895,6 +896,19 @@ name = "rand_core"
 version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec0be4795e2f6a28069bec0b5ff3e2ac9bafc99e6a9a7dc3547996c5c816922c"
+
+[[package]]
+name = "rouille"
+version = "0.1.0"
+source = "git+https://github.com/bnjbvr/rouille#a217f3b5681fabb3ef6be84219a387d3baa0b534"
+dependencies = [
+ "rouille_compilogenese",
+]
+
+[[package]]
+name = "rouille_compilogenese"
+version = "0.1.0"
+source = "git+https://github.com/bnjbvr/rouille#a217f3b5681fabb3ef6be84219a387d3baa0b534"
 
 [[package]]
 name = "rustc_version"

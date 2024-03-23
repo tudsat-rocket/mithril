@@ -26,6 +26,7 @@ filter = { git = "https://github.com/KoffeinFlummi/filter-rs" }
 siphasher = { version = "0.3", default-features = false }
 rand = { version = "0.8", default-features = false }
 rand_chacha = { version = "0.3", default-features = false }
+rouille = { git = "https://github.com/bnjbvr/rouille" }
 
 # Only load dependencies for embedded when we are compiling for the flight computer,
 # to avoid loading them when importing this crate from the groundstation on x86/wasm/Android

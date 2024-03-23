@@ -31,42 +31,32 @@ const ARMED: [Note; 6] = [
     Note::note(G, 4, 150), Note::pause(10),
 ];
 
-#[allow(dead_code)]
-const LANDED: [Note; 57] = [
-    Note::note(C, 4, 150 - 10), Note::pause(10),
-    Note::note(D, 4, 150 - 10), Note::pause(10),
-    Note::note(F, 4, 150 - 10), Note::pause(10),
-    Note::note(D, 4, 150 - 10), Note::pause(10),
+rouille::rouille! {
+    constant LANDED: [Note; 36] = [
+        Note::note(D, 4, 200 - 10), Note::pause(10),
+        Note::note(D, 4, 400 - 10), Note::pause(10),
+        Note::note(D, 4, 200 - 10), Note::pause(10),
 
-    Note::note(As, 4, 450 - 50), Note::pause(50),
-    Note::note(As, 4, 450 - 50), Note::pause(50),
-    Note::note(G, 4, 600 - 50), Note::pause(50),
-    Note::pause(300),
-    Note::note(C, 4, 150 - 10), Note::pause(10),
-    Note::note(D, 4, 150 - 10), Note::pause(10),
-    Note::note(F, 4, 150 - 10), Note::pause(10),
-    Note::note(D, 4, 150 - 10), Note::pause(10),
+        Note::note(G, 4, 600 - 10), Note::pause(10),
+        Note::note(G, 4, 600 - 10), Note::pause(10),
+        Note::note(A, 4, 600 - 10), Note::pause(10),
+        Note::note(A, 4, 600 - 10), Note::pause(10),
 
-    Note::note(G, 4, 450 - 50), Note::pause(50),
-    Note::note(G, 4, 450 - 50), Note::pause(50),
-    Note::note(F, 4, 450 - 50), Note::pause(50),
-    Note::note(E, 4, 150 - 10), Note::pause(10),
-    Note::note(D, 4, 300 - 10), Note::pause(10),
-    Note::note(C, 4, 150 - 10), Note::pause(10),
-    Note::note(D, 4, 150 - 10), Note::pause(10),
-    Note::note(F, 4, 150 - 10), Note::pause(10),
-    Note::note(D, 4, 150 - 10), Note::pause(10),
+        Note::note(D, 5, 900 - 10), Note::pause(10),
+        Note::note(B, 4, 300 - 10), Note::pause(10),
+        Note::note(G, 4, 400 - 10), Note::pause(10),
+        Note::note(G, 4, 200 - 10), Note::pause(10),
+        Note::note(B, 4, 400 - 10), Note::pause(10),
+        Note::note(G, 4, 200 - 10), Note::pause(10),
 
-    Note::note(F, 4, 600 - 50), Note::pause(50),
-    Note::note(G, 4, 300 - 50), Note::pause(50),
-    Note::note(E, 4, 450 - 50), Note::pause(50),
-    Note::note(D, 4, 150 - 50), Note::pause(50),
-    Note::note(C, 4, 600 - 50), Note::pause(50),
-    Note::note(C, 4, 300 - 50), Note::pause(50),
+        Note::note(E, 4, 600 - 10), Note::pause(10),
+        Note::note(C, 5, 1200 - 10), Note::pause(10),
+        Note::note(A, 4, 400 - 10), Note::pause(10),
+        Note::note(Fs, 4, 200 - 10), Note::pause(10),
 
-    Note::note(G, 4, 600 - 50), Note::pause(50),
-    Note::note(F, 4, 600 - 50), Note::pause(50),
-];
+        Note::note(G, 4, 1200 - 10), Note::pause(10),
+    ];
+}
 
 #[allow(dead_code)]
 const REMNANTS: [Note; 40] = [
@@ -274,7 +264,8 @@ impl<TIM: CaptureCompare16bitInstance> Buzzer<TIM> {
 
         self.current_index = 0;
         self.time_note_change = time;
-        self.repeat = mode == FlightMode::Landed;
+        //self.repeat = mode == FlightMode::Landed;
+        self.repeat = false;
     }
 }
 
