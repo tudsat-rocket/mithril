@@ -96,6 +96,10 @@ async fn main(_low_priority_spawner: Spawner) {
     config.rcc.sys = Sysclk::PLL1_P;
     let p = embassy_stm32::init(config);
 
+    // Initialize recovery outputs to low as soon as possible
+    let gpio_drogue = Output::new(p.PC8, Level::Low, Speed::Low);
+    let gpio_main = Output::new(p.PC9, Level::Low, Speed::Low);
+
     // Set up the independent watchdog. This reboots the processor
     // if it is not pet regularly, even if the main clock fails.
     // TODO: check if the current boot is a watchdog reset and react
@@ -166,8 +170,6 @@ async fn main(_low_priority_spawner: Spawner) {
     let led_green = Output::new(p.PC15, Level::High, Speed::Low);
     let leds = (led_red, led_yellow, led_green);
 
-    let gpio_drogue = Output::new(p.PC8, Level::Low, Speed::Low);
-    let gpio_main = Output::new(p.PC9, Level::Low, Speed::Low);
     let recovery = (gpio_drogue, gpio_main);
 
     let gpioc_block = p.PC7.block();

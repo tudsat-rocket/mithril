@@ -185,8 +185,6 @@ impl Vehicle {
         self.baro.tick().await;
         self.power.tick();
 
-        //self.gps.tick(self.time, &self.clocks);
-
         // Handle incoming CAN messages
         if let Some((id, msg)) = self.can.receive() {
             match id {
