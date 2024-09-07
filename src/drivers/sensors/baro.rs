@@ -6,12 +6,12 @@ use embedded_hal_async::spi::SpiDevice;
 
 use num_traits::float::Float;
 
-
 use defmt::*;
 
-const PREV_VALUES_LENGTH: usize = 1000;
-const THRESHOLD: i32 = 3;
-const MAX_OVERSHOOT_COUNTER: i32 = 2000;
+//const PREV_VALUES_LENGTH: usize = 1000;
+const PREV_VALUES_LENGTH: usize = 20;
+const THRESHOLD: i64 = 300;
+const MAX_OVERSHOOT_COUNTER: i32 = 500;
 
 #[derive(Debug)]
 struct MS5611CalibrationData {
@@ -119,22 +119,24 @@ impl<SPI: SpiDevice<u8>> MS5611<SPI> {
     }
 
     async fn read_sensor_data(&mut self, time: u32) -> Result<(), SPI::Error> {
-        //TODO add fake data reading for testing purposes
-
         let response = self.command(MS5611Command::ReadAdc, 3).await?;
         let mut value = ((response[0] as i32) << 16) + ((response[1] as i32) << 8) + (response[2] as i32);
-        if time % 1000 == 0{
-            value = 100000;
-        }
         let cal = self.calibration_data.as_ref().unwrap();
 
         if self.read_temp {
-            let mut dt = (value as i32) - ((cal.reference_temperature as i32) << 8);
-            info!("Baro read_sensor_data(). dt: {:?}", dt);
-            //TODO filtered = filter(dt)
-            if time % 10_000 < 5000{
-                dt = self.baro_filter.filter(dt);
+            //if time % 23 == 0 || time % 482 < 24 {
+            //    value += 1000000;
+            //}
+            if time % 13 == 0 {
+                value += 1000000;
             }
+
+            let mut dt = (value as i32) - ((cal.reference_temperature as i32) << 8);
+            //info!("Baro read_sensor_data(). dt: {:?}", dt);
+
+            //if time % 2_000 < 1000 {
+                dt = self.baro_filter.filter(dt, time);
+            //}
 
             self.dt = Some(dt);
         } else {
@@ -143,6 +145,7 @@ impl<SPI: SpiDevice<u8>> MS5611<SPI> {
 
         if let Some((dt, raw_pressure)) = self.dt.zip(self.raw_pressure) {
             let mut temp = 2000 + (((dt as i64) * (cal.temp_coef_temperature as i64)) >> 23);
+
             let mut offset =
                 ((cal.pressure_offset as i64) << 16) + ((cal.temp_coef_pressure_offset as i64 * dt as i64) >> 7);
             let mut sens = ((cal.pressure_sensitivity as i64) << 15)
@@ -185,7 +188,7 @@ impl<SPI: SpiDevice<u8>> MS5611<SPI> {
     }
 
     pub async fn tick(&mut self, time: u32) {
-        info!("Baro tick.");
+        //info!("Baro tick.");
         if let Err(_) = self.read_sensor_data(time).await {
             self.dt = None;
             self.temp = None;
@@ -252,7 +255,8 @@ enum MS5611OSR {
 }
 
 pub struct BaroFilter{
-    prev_values: VecDeque<i32>,
+    previous_raw_values: VecDeque<i32>,
+    last_filtered_value: Option<i32>,
     overshoot_counter: i32
 }
 
@@ -260,94 +264,160 @@ impl BaroFilter {
     pub fn new() -> Self{
         info!("BaroFilter new");
         Self{
-            prev_values: VecDeque::with_capacity(PREV_VALUES_LENGTH),
+            previous_raw_values: VecDeque::with_capacity(PREV_VALUES_LENGTH),
+            last_filtered_value: None,
             overshoot_counter: 0,
         }
     }
 
 
     //first filter (logical spike filter)
-    fn logical_spike_filter(&mut self, input: i32) -> i32{
-        //handle first value
-        if self.prev_values.is_empty() {
-            return input;
-        }
+    //fn logical_spike_filter(&mut self, input: i64) -> i64 {
+    //    //handle first value
+    //    if self.prev_values.is_empty() {
+    //        return input;
+    //    }
 
+    //    //handle normal case
+    //    //overshoot detected
+    //    let previous = self.prev_values.front().unwrap();
+    //    //println!("input: {:?}, previous: {:?}", input, previous);
+    //    if i64::abs(input - previous) > THRESHOLD {
+    //        let mut sorted: Vec<_> = self.prev_values.iter().collect();
+    //        sorted.sort();
+    //        let median = *sorted[sorted.len() / 2];
+
+    //        if i64::abs(median - input) > THRESHOLD {
+    //            return *previous;
+    //        }
+
+    //        //it's still no drift from the real new value
+    //        //if self.overshoot_counter < MAX_OVERSHOOT_COUNTER {
+    //        //    //println!("inc");
+    //        //    self.overshoot_counter += 1;
+    //        //    return *previous;
+    //        //} else {
+    //        //    println!("overshoot_counter: {}", self.overshoot_counter);
+    //        //}
+    //    }
+
+    //    ////either no overshoot detected or we drifted
+    //    //If self.overshoot_counter > 0 {
+    //    //    println!("resetting overshoot_counter: {}", self.overshoot_counter);
+    //    //}
+    //    //Self.overshoot_counter = 0;
+    //    input
+    //}
+
+    //fn causal_median_filter(&mut self, input: i64) -> i64 {
+    //    const SKIP_FACTOR: usize = 5;
+
+    //    if self.prev_values.is_empty() {
+    //        return input;
+    //    }
+
+    //    let mut sorted: Vec<_> = self.prev_values.iter().collect();
+    //    sorted.sort();
+    //    *sorted[sorted.len() / 2]
+
+    //    //if self.prev_values[PREV_VALUES_LENGTH-1] != -1 {
+    //    //    let mut median_array: [i64; PREV_VALUES_LENGTH/SKIP_FACTOR + 1] = [-1; PREV_VALUES_LENGTH/SKIP_FACTOR + 1];
+    //    //    let mut j = 0;
+    //    //    for i in 0..PREV_VALUES_LENGTH {
+    //    //        if i % SKIP_FACTOR == 0 {
+    //    //            median_array[j] = self.prev_values[i];
+    //    //            j += 1;
+    //    //        }
+    //    //    }
+    //    //    median_array[PREV_VALUES_LENGTH/SKIP_FACTOR] = input;
+
+    //    //    Self::median(&mut median_array)
+    //    //}
+    //    //else{
+    //    //    input
+    //    //}
+    //}
+
+
+    pub fn filter(&mut self, input_value: i32, time: u32) -> i32 {
+        let previous = self.last_filtered_value.unwrap_or(input_value);
+
+        let mut sorted: Vec<_> = self.previous_raw_values.iter().collect();
+        sorted.sort();
+        let median = if sorted.len() > 0 {
+            *sorted[sorted.len() / 2]
+        } else {
+            input_value
+        };
+
+        //let mean = if self.previous_raw_values.is_empty() {
+        //    input_value
+        //} else {
+        //    self.previous_raw_values.iter().sum::<i32>() / (self.previous_raw_values.len() as i32)
+        //};
+
+        //info!("running filter with input = {:?}", value);
         //handle normal case
         //overshoot detected
-        let previous = self.prev_values.front().unwrap();
-        if i32::abs(input - previous) > THRESHOLD{
-            //it's still no drift from the real new value
-            if self.overshoot_counter < MAX_OVERSHOOT_COUNTER {
-                self.overshoot_counter += 1;
-                return *previous;
-            }
-        }
+        //println!("input: {:?}, previous: {:?}", input, previous);
+        //let filtered = if i64::abs(input_value - median) > THRESHOLD {
+        //    //if i64::abs(median - input_value) > THRESHOLD {
+        //    //    previous
+        //    //} else {
+        //    //    input_value
+        //    //}
 
-        //either no overshoot detected or we drifted
-        self.overshoot_counter = 0;
-        input
+        //    //it's still no drift from the real new value
+        //    //if self.overshoot_counter < MAX_OVERSHOOT_COUNTER {
+        //    //    //println!("inc");
+        //    //    self.overshoot_counter += 1;
+        //    //    return *previous;
+        //    //} else {
+        //    //    println!("overshoot_counter: {}", self.overshoot_counter);
+        //    //}
+        //    previous
+        //} else {
+        //    input_value
+        //};
+        let filtered = median;
+
+        //const ALPHA: f32 = 0.99;
+        //let filtered = ((previous as f32) * ALPHA + (input_value as f32) * (1.0 - ALPHA)) as i32;
+
+        //if time % 10 == 0 {
+            self.previous_raw_values.truncate(PREV_VALUES_LENGTH - 1);
+            self.previous_raw_values.push_front(input_value);
+        //}
+        self.last_filtered_value = Some(filtered);
+
+        //info!("spike filter result = {:?}", value);
+        filtered
     }
 
-    /*
-        fn causal_median_filter(&mut self, input: i32) -> i32{
-            if self.prev_values[PREV_VALUES_LENGTH-1] != -1 {
-                let mut median_array: [i32; PREV_VALUES_LENGTH/SKIP_FACTOR + 1] = [-1; PREV_VALUES_LENGTH/SKIP_FACTOR + 1];
-                let mut j = 0;
-                for i in 0..PREV_VALUES_LENGTH {
-                    if i % SKIP_FACTOR == 0 {
-                        median_array[j] = self.prev_values[i];
-                        j += 1;
-                    }
-                }
-                median_array[PREV_VALUES_LENGTH/SKIP_FACTOR] = input;
+    //fn median_of_medians(array: &mut [i64], k: usize) -> i64 {
+    //    if array.len() == 1 {
+    //        return array[0];
+    //    }
 
-                Self::median(&mut median_array)
-            }
-            else{
-                input
-            }
-        }
+    //    let pivot = array[array.len() / 2];
+    //    let (lows, highs): (Vec<i64>, Vec<i64>) = array.iter().partition(|&&x| x < pivot);
+    //    let num_lows = lows.len();
 
-     */
+    //    if k < num_lows {
+    //        Self::median_of_medians(&mut lows.into_iter().collect::<Vec<_>>(), k)
+    //    } else if k > num_lows {
+    //        Self::median_of_medians(&mut highs.into_iter().collect::<Vec<_>>(), k - num_lows - 1)
+    //    } else {
+    //        pivot
+    //    }
+    //}
 
-
-    pub fn filter(&mut self, input: i32) -> i32{
-        info!("running filter with input = {:?}", input);
-        let filtered_value = self.logical_spike_filter(input);
-        //let filtered_value = self.causal_median_filter(filtered_value);
-        self.prev_values.truncate(PREV_VALUES_LENGTH - 1);
-        self.prev_values.push_front(filtered_value);
-        info!("spike filter result = {:?}", filtered_value);
-        return filtered_value;
-    }
-
-    /*
-        fn median_of_medians(array: &mut [i32], k: usize) -> i32 {
-            if array.len() == 1 {
-                return array[0];
-            }
-
-            let pivot = array[array.len() / 2];
-            let (lows, highs): (Vec<i32>, Vec<i32>) = array.iter().partition(|&&x| x < pivot);
-            let num_lows = lows.len();
-
-            if k < num_lows {
-                Self::median_of_medians(&mut lows.into_iter().collect::<Vec<_>>(), k)
-            } else if k > num_lows {
-                Self::median_of_medians(&mut highs.into_iter().collect::<Vec<_>>(), k - num_lows - 1)
-            } else {
-                pivot
-            }
-        }
-
-        fn median(array: &mut [i32]) -> i32 {
-            let length = array.len();
-            if length % 2 == 0{
-                (Self::median_of_medians(array, length / 2 - 1) + Self::median_of_medians(array, length / 2)) / 2
-            } else {
-                Self::median_of_medians(array, length / 2)
-            }
-        }
-     */
+    //fn median(array: &mut [i64]) -> i64 {
+    //    let length = array.len();
+    //    if length % 2 == 0{
+    //        (Self::median_of_medians(array, length / 2 - 1) + Self::median_of_medians(array, length / 2)) / 2
+    //    } else {
+    //        Self::median_of_medians(array, length / 2)
+    //    }
+    //}
 }

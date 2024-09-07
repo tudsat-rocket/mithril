@@ -52,6 +52,7 @@ use vehicle::*;
 #[cfg(feature="gcs")]
 use gcs::*;
 
+//const HEAP_SIZE: usize = 12384;
 const HEAP_SIZE: usize = 12384;
 static mut HEAP: [core::mem::MaybeUninit<u8>; HEAP_SIZE] = [core::mem::MaybeUninit::uninit(); HEAP_SIZE];
 
