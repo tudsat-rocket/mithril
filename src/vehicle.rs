@@ -187,7 +187,7 @@ impl Vehicle {
         self.imu.tick().await;
         self.acc.tick().await;
         self.mag.tick().await;
-        self.baro.tick().await;
+        self.baro.tick(self.time).await;
         self.power.tick();
 
         // Handle incoming CAN messages
