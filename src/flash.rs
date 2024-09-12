@@ -23,9 +23,7 @@ use crc::{Crc, CRC_16_IBM_SDLC};
 use static_cell::StaticCell;
 
 use defmt::*;
-
 use shared_types::*;
-
 use crate::drivers::flash::W25Q;
 use crate::usb::FlashUsbHandle;
 
@@ -313,6 +311,9 @@ impl<SPI: SpiDevice> Flash<SPI> {
     }
 
     async fn run(&mut self) -> ! {
+
+        self.test().await.expect("Test error");
+
         loop {
             let request = self.request_receiver.receive().await;
             match request {
@@ -352,5 +353,45 @@ impl<SPI: SpiDevice> Flash<SPI> {
                 }
             }
         }
+    }
+
+    async fn test(&mut self) -> Result<(), FlashError<SPI::Error>> {
+
+        let mut addr = 100 ;
+
+        let magic_value: u32 = 0xdeadbeef;
+
+        let data = magic_value.serialize().unwrap_or_default();
+
+        // write 4 bytes at once
+        for _ in 0..1000  {
+            match self.driver.write(addr, &data).await {
+                Ok(_0) => {
+
+                }
+                Err(..) => {
+                    error!("Flash writing error in test");
+                }
+            };
+            addr += 4;
+        }
+
+        addr = 100;
+        // verify by reading back
+        for _ in 0..1000  {
+            match self.driver.read(addr as u32, 4).await {
+                Ok(data) => {
+
+                    if !(postcard::from_bytes::<u32>(&data).unwrap() == 0xdeadbeef) {
+                        error!("Flash reading error in test. Is {:?}, should be 0xdeadbeef",
+                        postcard::from_bytes::<u32>(&data).unwrap());
+                    }
+                }
+                Err(e) => {
+                    error!("Flash reading error in test: {:?}", Debug2Format(&e));
+                }
+            }
+        }
+        Ok(())
     }
 }
