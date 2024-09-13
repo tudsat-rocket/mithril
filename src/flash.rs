@@ -363,13 +363,13 @@ impl<SPI: SpiDevice> Flash<SPI> {
 
         let mut addr = 100 ;
 
-        let magic_value: u32 = 0xdeadbeef;
+        //let magic_value: u32 = 0xdeadbeef;
 
-        let data = magic_value.serialize().unwrap_or_default();
+        let data = [0xdeu8, 0xadu8, 0xbeu8, 0xefu8];
 
         // write 4 bytes at once
         for i in 0..1000  {
-            match self.driver.write(addr, &data).await {
+            match self.driver.write(addr, data.as_slice()).await {
                 Ok(_0) => {
                     if i%10 == 0 {
                         info!("Writing {:?}% done", i/10);
@@ -382,24 +382,34 @@ impl<SPI: SpiDevice> Flash<SPI> {
             addr += 4;
         }
 
+        let mut err = 0;
         addr = 100;
         // verify by reading back
         for i in 0..1000  {
             match self.driver.read(addr as u32, 4).await {
                 Ok(data) => {
 
-                    if !(postcard::from_bytes::<u32>(&data).unwrap() == 0xdeadbeef) {
-                        error!("Flash reading error in test. Is {:?}, should be 0xdeadbeef",
-                        postcard::from_bytes::<u32>(&data).unwrap());
+                    if !(data == [0xde, 0xad, 0xbe, 0xef]) {
+                        error!("Flash reading error in test. Is [{:?}{:?}{:?}{:?}, should be 0xdeadbeef",
+                        data[0], data[1], data[2], data[3]);
+                        err += 1;
                     }
                 }
                 Err(e) => {
                     error!("Flash reading error in test: {:?}", Debug2Format(&e));
                 }
             }
+            addr += 4;
         }
 
-        info!("Flash test success");
+        match err {
+            0 => {
+                info!("Flash test success");
+            }
+            _ => {
+                info!("Flash test failed with {:?} wrong reads", err);
+            }
+        }
         Ok(())
     }
 }
