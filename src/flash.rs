@@ -357,6 +357,10 @@ impl<SPI: SpiDevice> Flash<SPI> {
 
     async fn test(&mut self) -> Result<(), FlashError<SPI::Error>> {
 
+        info!("Starting flash test");
+
+        self.erase().await;
+
         let mut addr = 100 ;
 
         let magic_value: u32 = 0xdeadbeef;
@@ -364,10 +368,12 @@ impl<SPI: SpiDevice> Flash<SPI> {
         let data = magic_value.serialize().unwrap_or_default();
 
         // write 4 bytes at once
-        for _ in 0..1000  {
+        for i in 0..1000  {
             match self.driver.write(addr, &data).await {
                 Ok(_0) => {
-
+                    if i%10 == 0 {
+                        info!("Writing {:?}% done", i/10);
+                    }
                 }
                 Err(..) => {
                     error!("Flash writing error in test");
@@ -378,7 +384,7 @@ impl<SPI: SpiDevice> Flash<SPI> {
 
         addr = 100;
         // verify by reading back
-        for _ in 0..1000  {
+        for i in 0..1000  {
             match self.driver.read(addr as u32, 4).await {
                 Ok(data) => {
 
@@ -392,6 +398,8 @@ impl<SPI: SpiDevice> Flash<SPI> {
                 }
             }
         }
+
+        info!("Flash test success");
         Ok(())
     }
 }
