@@ -365,12 +365,12 @@ impl<SPI: SpiDevice> Flash<SPI> {
 
         //let magic_value: u32 = 0xdeadbeef;
 
-        let data = [0xdeu8, 0xadu8, 0xbeu8, 0xefu8];
+        let data = &[0xdeu8, 0xadu8, 0xbeu8, 0xefu8];
 
         // write 4 bytes at once
         for i in 0..1000  {
-            match self.driver.write(addr, data.as_slice()).await {
-                Ok(_0) => {
+            match self.driver.write(addr, data).await {
+                Ok(_) => {
                     if i%10 == 0 {
                         info!("Writing {:?}% done", i/10);
                     }
@@ -385,12 +385,12 @@ impl<SPI: SpiDevice> Flash<SPI> {
         let mut err = 0;
         addr = 100;
         // verify by reading back
-        for i in 0..1000  {
+        for _i in 0..1000  {
             match self.driver.read(addr as u32, 4).await {
                 Ok(data) => {
 
                     if !(data == [0xde, 0xad, 0xbe, 0xef]) {
-                        error!("Flash reading error in test. Is [{:?}{:?}{:?}{:?}, should be 0xdeadbeef",
+                        error!("Flash reading error in test. Is 0x[{:x}{:x}{:x}{:x}], should be 0xdeadbeef",
                         data[0], data[1], data[2], data[3]);
                         err += 1;
                     }
