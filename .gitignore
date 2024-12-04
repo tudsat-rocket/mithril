@@ -1,5 +1,7 @@
 /target
 /logs
+/.direnv/
+/.pre-commit-config.yaml
 *.pdf
 *.exe
 *.dll
