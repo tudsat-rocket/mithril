@@ -8,7 +8,7 @@ pub struct LIS3MDL<SPI: SpiDevice<u8>> {
     spi: SPI,
     scale: LIS3MDLFullScale,
     mag: Option<Vector3<f32>>,
-    offset: Vector3<f32>
+    offset: Vector3<f32>,
 }
 
 impl<SPI: SpiDevice<u8>> LIS3MDL<SPI> {
@@ -17,7 +17,7 @@ impl<SPI: SpiDevice<u8>> LIS3MDL<SPI> {
             spi,
             scale: LIS3MDLFullScale::Max16Gauss,
             mag: None,
-            offset: Vector3::default()
+            offset: Vector3::default(),
         };
 
         let whoami = lis3.read_u8(LIS3MDLRegister::WhoAmI).await?;
@@ -25,7 +25,8 @@ impl<SPI: SpiDevice<u8>> LIS3MDL<SPI> {
         // Enable temperature sensor and fast output data rate
         lis3.write_u8(LIS3MDLRegister::CtrlReg1, 0b1000_0010).await?;
         // Set full scale
-        lis3.write_u8(LIS3MDLRegister::CtrlReg2, (lis3.scale as u8) << 5).await?;
+        lis3.write_u8(LIS3MDLRegister::CtrlReg2, (lis3.scale as u8) << 5)
+            .await?;
         // Enable continuous-conversion mode
         lis3.write_u8(LIS3MDLRegister::CtrlReg3, 0b0000_0000).await?;
 
@@ -114,7 +115,7 @@ enum LIS3MDLRegister {
     IntCfg = 0x30,
     IntSrc = 0x31,
     IntThsL = 0x32,
-    IntThsH = 0x33
+    IntThsH = 0x33,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]

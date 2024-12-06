@@ -3,25 +3,25 @@
 use core::num::Wrapping;
 
 use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
-use embassy_stm32::gpio::{Output, Input};
+use embassy_stm32::gpio::{Input, Output};
 use embassy_stm32::peripherals::*;
 use embassy_stm32::spi::Spi;
 use embassy_stm32::time::Hertz;
 use embassy_stm32::wdg::IndependentWatchdog;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_time::Instant;
-use embassy_time::{Ticker, Duration};
+use embassy_time::{Duration, Ticker};
 
 use defmt::*;
 
-use state_estimator::StateEstimator;
 use shared_types::*;
+use state_estimator::StateEstimator;
 
 use crate::buzzer::Buzzer as BuzzerDriver;
 use crate::can::*;
 use crate::drivers::sensors::*;
-use crate::lora::*;
 use crate::flash::*;
+use crate::lora::*;
 use crate::usb::*;
 
 type SpiInst = Spi<'static, SPI1, DMA2_CH3, DMA2_CH2>;
@@ -31,7 +31,11 @@ type Magnetometer = LIS3MDL<SpiDevice<'static, CriticalSectionRawMutex, SpiInst,
 type Barometer = MS5611<SpiDevice<'static, CriticalSectionRawMutex, SpiInst, Output<'static, PC6>>>;
 type Power = PowerMonitor<ADC1, PB0, PC5, PC4>;
 
-type RadioHandle = Radio<SpiDevice<'static, CriticalSectionRawMutex, Spi<'static, SPI1, DMA2_CH3, DMA2_CH2>, Output<'static, PA1>>, Input<'static, PC0>,Input<'static, PC1>>;
+type RadioHandle = Radio<
+    SpiDevice<'static, CriticalSectionRawMutex, Spi<'static, SPI1, DMA2_CH3, DMA2_CH2>, Output<'static, PA1>>,
+    Input<'static, PC0>,
+    Input<'static, PC1>,
+>;
 
 type LEDs = (Output<'static, PC13>, Output<'static, PC14>, Output<'static, PC15>);
 type Buzzer = BuzzerDriver<TIM3>;
@@ -88,29 +92,32 @@ impl Into<VehicleState> for &mut Vehicle {
         // clear io module status if too long ago
         const THRESHOLD: u32 = 1000;
 
-        for io_module in [
-            &mut self.last_acs_message,
-            &mut self.last_recovery_message,
-            &mut self.last_payload_message,
-        ] {
-            if io_module.map(|(t, _, _, _)| (self.time - t).0 > THRESHOLD).unwrap_or(false) {
+        for io_module in [&mut self.last_acs_message, &mut self.last_recovery_message, &mut self.last_payload_message] {
+            if io_module
+                .map(|(t, _, _, _)| (self.time - t).0 > THRESHOLD)
+                .unwrap_or(false)
+            {
                 *io_module = None;
             }
         }
 
         for pressure_sensor in [
-            &mut self.acs_tank_pressure,
-            &mut self.acs_regulator_pressure,
-            &mut self.acs_accel_valve_pressure,
-            &mut self.acs_decel_valve_pressure,
-            &mut self.recovery_pressure
+            &mut self.acs_tank_pressure, &mut self.acs_regulator_pressure, &mut self.acs_accel_valve_pressure,
+            &mut self.acs_decel_valve_pressure, &mut self.recovery_pressure,
         ] {
-            if pressure_sensor.map(|(t, _)| (self.time - t).0 > THRESHOLD).unwrap_or(false) {
+            if pressure_sensor
+                .map(|(t, _)| (self.time - t).0 > THRESHOLD)
+                .unwrap_or(false)
+            {
                 *pressure_sensor = None;
             }
         }
 
-        if self.main_release_sensor.map(|(t, _v)| (self.time - t).0 > THRESHOLD).unwrap_or(false) {
+        if self
+            .main_release_sensor
+            .map(|(t, _v)| (self.time - t).0 > THRESHOLD)
+            .unwrap_or(false)
+        {
             self.main_release_sensor = None;
         }
 
@@ -159,9 +166,15 @@ impl Into<VehicleState> for &mut Vehicle {
             payload_current: Some(self.last_payload_message.map(|(_, _, c, _)| c)),
             payload_temperature: Some(self.last_payload_message.map(|(_, _, _, t)| t)),
             fins_present: Some([
-                self.last_fin_message[0].map(|t| (self.time - t).0 < THRESHOLD).unwrap_or(false),
-                self.last_fin_message[1].map(|t| (self.time - t).0 < THRESHOLD).unwrap_or(false),
-                self.last_fin_message[2].map(|t| (self.time - t).0 < THRESHOLD).unwrap_or(false),
+                self.last_fin_message[0]
+                    .map(|t| (self.time - t).0 < THRESHOLD)
+                    .unwrap_or(false),
+                self.last_fin_message[1]
+                    .map(|t| (self.time - t).0 < THRESHOLD)
+                    .unwrap_or(false),
+                self.last_fin_message[2]
+                    .map(|t| (self.time - t).0 < THRESHOLD)
+                    .unwrap_or(false),
             ]),
 
             acs_mode: Some(self.acs_mode),
@@ -185,7 +198,6 @@ impl Into<VehicleState> for &mut Vehicle {
             gps_variance: Some(self.state_estimator.kalman.R.diagonal()[4]),
 
             ..Default::default()
-
         }
     }
 }
@@ -293,23 +305,39 @@ impl Vehicle {
         if let Some(msg) = self.can.receive() {
             self.handle_can_bus_message(&msg);
             match msg {
-                FcReceivedCanBusMessage::BatteryTelemetry(_id, bat_msg) => {
-                    self.power.handle_battery_can_msg(bat_msg)
-                },
-                FcReceivedCanBusMessage::IoBoardSensor(role, id, sensor_msg) => {
-                    match (role, id) {
-                        (IoBoardRole::Acs, 0) => {
-                            self.acs_tank_pressure = self.settings.acs_tank_pressure_sensor_settings.apply(sensor_msg.i2c_sensors[0]).map(|v| (self.time, v));
-                            self.acs_regulator_pressure = self.settings.acs_regulator_pressure_sensor_settings.apply(sensor_msg.i2c_sensors[1]).map(|v| (self.time, v));
-                            self.acs_accel_valve_pressure = self.settings.acs_accel_valve_pressure_sensor_settings.apply(sensor_msg.i2c_sensors[2]).map(|v| (self.time, v));
-                            self.acs_decel_valve_pressure = self.settings.acs_decel_valve_pressure_sensor_settings.apply(sensor_msg.i2c_sensors[3]).map(|v| (self.time, v));
-                        },
-                        (IoBoardRole::Recovery, 0) => {
-                            self.recovery_pressure = self.settings.recovery_pressure_sensor_settings.apply(sensor_msg.i2c_sensors[0]).map(|v| (self.time, v));
-                            self.main_release_sensor = sensor_msg.i2c_sensors[3].map(|(v, _)| (self.time, (v & 0b1) == 0));
-                        },
-                        _ => {}
+                FcReceivedCanBusMessage::BatteryTelemetry(_id, bat_msg) => self.power.handle_battery_can_msg(bat_msg),
+                FcReceivedCanBusMessage::IoBoardSensor(role, id, sensor_msg) => match (role, id) {
+                    (IoBoardRole::Acs, 0) => {
+                        self.acs_tank_pressure = self
+                            .settings
+                            .acs_tank_pressure_sensor_settings
+                            .apply(sensor_msg.i2c_sensors[0])
+                            .map(|v| (self.time, v));
+                        self.acs_regulator_pressure = self
+                            .settings
+                            .acs_regulator_pressure_sensor_settings
+                            .apply(sensor_msg.i2c_sensors[1])
+                            .map(|v| (self.time, v));
+                        self.acs_accel_valve_pressure = self
+                            .settings
+                            .acs_accel_valve_pressure_sensor_settings
+                            .apply(sensor_msg.i2c_sensors[2])
+                            .map(|v| (self.time, v));
+                        self.acs_decel_valve_pressure = self
+                            .settings
+                            .acs_decel_valve_pressure_sensor_settings
+                            .apply(sensor_msg.i2c_sensors[3])
+                            .map(|v| (self.time, v));
                     }
+                    (IoBoardRole::Recovery, 0) => {
+                        self.recovery_pressure = self
+                            .settings
+                            .recovery_pressure_sensor_settings
+                            .apply(sensor_msg.i2c_sensors[0])
+                            .map(|v| (self.time, v));
+                        self.main_release_sensor = sensor_msg.i2c_sensors[3].map(|(v, _)| (self.time, (v & 0b1) == 0));
+                    }
+                    _ => {}
                 },
                 FcReceivedCanBusMessage::IoBoardPower(role, power_msg) => {
                     use num_traits::Float;
@@ -321,24 +349,27 @@ impl Vehicle {
                     let temperature = 1.0 / (T0_INV + B_INV * (r / R0).ln());
                     let temperature = ((temperature - 273.15) * 2.0) as i8;
                     let msg = (
-                        self.time,
-                        power_msg.output_voltage,
-                        power_msg.output_current,
-                        temperature
+                        self.time, power_msg.output_voltage, power_msg.output_current, temperature,
                     );
 
                     match role {
-                        IoBoardRole::Acs => { self.last_acs_message = Some(msg); }
-                        IoBoardRole::Recovery => { self.last_recovery_message = Some(msg); }
-                        IoBoardRole::Payload => { self.last_payload_message = Some(msg); }
+                        IoBoardRole::Acs => {
+                            self.last_acs_message = Some(msg);
+                        }
+                        IoBoardRole::Recovery => {
+                            self.last_recovery_message = Some(msg);
+                        }
+                        IoBoardRole::Payload => {
+                            self.last_payload_message = Some(msg);
+                        }
                     }
-                },
+                }
                 FcReceivedCanBusMessage::FinBoardData(fin, _, _) => {
                     let fin = fin as usize;
                     if fin < self.last_fin_message.len() {
                         self.last_fin_message[fin] = Some(self.time);
                     }
-                },
+                }
             }
         }
 
@@ -363,16 +394,22 @@ impl Vehicle {
         // Process incoming commands, both from USB...
         if let Some(msg) = self.usb.next_uplink_message() {
             match msg {
-                UplinkMessage::Heartbeat => {},
+                UplinkMessage::Heartbeat => {}
                 // TODO: remove bootloader command?
-                UplinkMessage::Command(cmd) => if let Command::RebootToBootloader = cmd {
-                    //reboot_to_bootloader()
-                } else {
-                    self.handle_command(cmd).await
-                },
-                UplinkMessage::ReadFlash(adress, size) => { let _ = self.flash.read(adress, size); }
+                UplinkMessage::Command(cmd) => {
+                    if let Command::RebootToBootloader = cmd {
+                        //reboot_to_bootloader()
+                    } else {
+                        self.handle_command(cmd).await
+                    }
+                }
+                UplinkMessage::ReadFlash(adress, size) => {
+                    let _ = self.flash.read(adress, size);
+                }
                 UplinkMessage::ReadSettings => self.usb.send_message(DownlinkMessage::Settings(self.settings.clone())),
-                UplinkMessage::WriteSettings(settings) => { let _ = self.flash.write_settings(settings); }
+                UplinkMessage::WriteSettings(settings) => {
+                    let _ = self.flash.write_settings(settings);
+                }
                 UplinkMessage::ApplyLoRaSettings(_) => {}
             }
         }
@@ -384,12 +421,14 @@ impl Vehicle {
 
         // Set output according to flight mode
         let elapsed = self.state_estimator.time_in_mode();
-        let drogue_high = self.mode == FlightMode::RecoveryDrogue && self.settings.drogue_output_settings.currently_high(elapsed);
-        let main_high = self.mode == FlightMode::RecoveryMain && self.settings.main_output_settings.currently_high(elapsed);
+        let drogue_high =
+            self.mode == FlightMode::RecoveryDrogue && self.settings.drogue_output_settings.currently_high(elapsed);
+        let main_high =
+            self.mode == FlightMode::RecoveryMain && self.settings.main_output_settings.currently_high(elapsed);
         self.recovery.0.set_level(drogue_high.into());
         self.recovery.1.set_level(main_high.into());
 
-        let (r,y,g) = self.mode.led_state(self.time.0);
+        let (r, y, g) = self.mode.led_state(self.time.0);
         self.leds.0.set_level((!r).into());
         self.leds.1.set_level((!y).into());
         self.leds.2.set_level((!g).into());
@@ -448,18 +487,21 @@ impl Vehicle {
         if self.time.0 % 20 == 0 {
             let valve_state = match self.acs_mode {
                 AcsMode::Disabled => ThrusterValveState::Closed,
-                AcsMode::Auto => self.state_estimator.thruster_valve(self.acs_tank_pressure.map(|(_t, v)| v).unwrap_or(300.0)),
+                AcsMode::Auto => self
+                    .state_estimator
+                    .thruster_valve(self.acs_tank_pressure.map(|(_t, v)| v).unwrap_or(300.0)),
                 AcsMode::Manual => match self.last_manual_thruster_input {
                     Some((time, state)) => {
-                        if (self.time - time).0 < 450 { // TODO
+                        if (self.time - time).0 < 450 {
+                            // TODO
                             state
                         } else {
                             self.last_manual_thruster_input = None;
                             ThrusterValveState::Closed
                         }
-                    },
+                    }
                     None => ThrusterValveState::Closed,
-                }
+                },
             };
 
             self.last_thruster_valve_state = valve_state;
@@ -525,24 +567,28 @@ impl Vehicle {
         info!("Received command: {:?}", Debug2Format(&cmd));
         match cmd {
             Command::Reboot => cortex_m::peripheral::SCB::sys_reset(),
-            Command::RebootToBootloader => {},
+            Command::RebootToBootloader => {}
             Command::SetFlightMode(fm) => self.switch_mode(fm),
             Command::SetTransmitPower(txp) => self.radio.set_transmit_power(txp),
             Command::SetDataRate(dr) => self.data_rate = dr,
             Command::SetAcsMode(am) => self.acs_mode = am,
-            Command::SetAcsValveState(vs) => if self.acs_mode != AcsMode::Disabled {
-                // We've interferred, set mode to manual.
-                self.acs_mode = AcsMode::Manual;
-                self.last_manual_thruster_input = Some((self.time, vs));
-            },
+            Command::SetAcsValveState(vs) => {
+                if self.acs_mode != AcsMode::Disabled {
+                    // We've interferred, set mode to manual.
+                    self.acs_mode = AcsMode::Manual;
+                    self.last_manual_thruster_input = Some((self.time, vs));
+                }
+            }
             Command::SetIoModuleOutput(role, output_id, state) if role == IoBoardRole::Recovery && output_id <= 1 => {
                 self.camera_state[output_id as usize] = state;
-            },
+            }
             Command::SetIoModuleOutput(role, _output_id, state) if role == IoBoardRole::Payload => {
                 self.camera_state[2] = state;
-            },
-            Command::SetIoModuleOutput(_role, _output_id, _state) => {},
-            Command::EraseFlash => { let _ = self.flash.erase(); },
+            }
+            Command::SetIoModuleOutput(_role, _output_id, _state) => {}
+            Command::EraseFlash => {
+                let _ = self.flash.erase();
+            }
         }
     }
 
@@ -571,7 +617,8 @@ impl Vehicle {
         /*if self.time.0 % 1000 == 0 {
             let vs: VehicleState = self.into();
             Some(DownlinkMessage::TelemetryGPS(vs.into()))
-        } else */if self.time.0 % 50 == 0 {
+        } else */
+        if self.time.0 % 50 == 0 {
             let vs: VehicleState = self.into();
             Some(DownlinkMessage::TelemetryRawSensors(vs.into()))
         } else if self.time.0 % 50 == 10 {

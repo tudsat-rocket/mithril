@@ -20,7 +20,7 @@ const TX_BASE_ADDRESS: u8 = 0;
 const RX_BASE_ADDRESS: u8 = 64;
 
 pub const TRANSMISSION_TIMEOUT_MS: u32 = 18;
-#[cfg(feature="gcs")]
+#[cfg(feature = "gcs")]
 pub const FC_GCS_TIME_OFFSET_MS: i64 = 16;
 
 const DOWNLINK_PACKET_SIZE: u8 = 26;
@@ -76,7 +76,9 @@ impl<SPI: SpiDevice<u8>, IRQ: InputPin, BUSY: InputPin> LLCC68<SPI, IRQ, BUSY> {
         // Wait for LLCC68 to enter standby mode
         let mut done = false;
         for _i in 0..20 {
-            done = self.command(LLCC68OpCode::GetStatus, &[], 1).await
+            done = self
+                .command(LLCC68OpCode::GetStatus, &[], 1)
+                .await
                 .map(|x| (x[0] >> 4) == 0x2)
                 .unwrap_or(false);
             if done {
@@ -108,14 +110,16 @@ impl<SPI: SpiDevice<u8>, IRQ: InputPin, BUSY: InputPin> LLCC68<SPI, IRQ, BUSY> {
             LLCC68LoRaSpreadingFactor::SF7,
             LLCC68LoRaCodingRate::CR4of6,
             false,
-        ).await?;
+        )
+        .await?;
         self.set_frequency(self.frequency).await?;
         self.set_buffer_base_addresses(TX_BASE_ADDRESS, RX_BASE_ADDRESS).await?;
         self.set_output_power(TransmitPower::P14dBm).await?;
         self.set_dio1_interrupt(
             (LLCC68Interrupt::RxDone as u16) | (LLCC68Interrupt::CrcErr as u16),
             LLCC68Interrupt::RxDone as u16,
-        ).await?;
+        )
+        .await?;
         self.switch_to_rx().await?;
 
         // After the configuration we can treat the busy line a bit more relaxed,
@@ -143,7 +147,9 @@ impl<SPI: SpiDevice<u8>, IRQ: InputPin, BUSY: InputPin> LLCC68<SPI, IRQ, BUSY> {
     }
 
     async fn read_register(&mut self, address: u16) -> Result<u8, RadioError<SPI::Error>> {
-        Ok(self.command(LLCC68OpCode::ReadRegister, &address.to_be_bytes(), 2).await?[1])
+        Ok(self
+            .command(LLCC68OpCode::ReadRegister, &address.to_be_bytes(), 2)
+            .await?[1])
     }
 
     async fn write_register(&mut self, address: u16, value: u8) -> Result<(), RadioError<SPI::Error>> {
@@ -153,7 +159,8 @@ impl<SPI: SpiDevice<u8>, IRQ: InputPin, BUSY: InputPin> LLCC68<SPI, IRQ, BUSY> {
     }
 
     async fn set_packet_type(&mut self, packet_type: LLCC68PacketType) -> Result<(), RadioError<SPI::Error>> {
-        self.command(LLCC68OpCode::SetPacketType, &[packet_type as u8], 0).await?;
+        self.command(LLCC68OpCode::SetPacketType, &[packet_type as u8], 0)
+            .await?;
         Ok(())
     }
 
@@ -179,7 +186,8 @@ impl<SPI: SpiDevice<u8>, IRQ: InputPin, BUSY: InputPin> LLCC68<SPI, IRQ, BUSY> {
             LLCC68OpCode::SetModulationParams,
             &[spreading_factor as u8, bandwidth as u8, coding_rate as u8, low_data_rate_optimization as u8],
             0,
-        ).await?;
+        )
+        .await?;
         Ok(())
     }
 
@@ -203,12 +211,18 @@ impl<SPI: SpiDevice<u8>, IRQ: InputPin, BUSY: InputPin> LLCC68<SPI, IRQ, BUSY> {
                 invert_iq as u8,
             ],
             0,
-        ).await?;
+        )
+        .await?;
         Ok(())
     }
 
-    async fn set_buffer_base_addresses(&mut self, tx_address: u8, rx_address: u8) -> Result<(), RadioError<SPI::Error>> {
-        self.command(LLCC68OpCode::SetBufferBaseAddress, &[tx_address, rx_address], 0).await?;
+    async fn set_buffer_base_addresses(
+        &mut self,
+        tx_address: u8,
+        rx_address: u8,
+    ) -> Result<(), RadioError<SPI::Error>> {
+        self.command(LLCC68OpCode::SetBufferBaseAddress, &[tx_address, rx_address], 0)
+            .await?;
         Ok(())
     }
 
@@ -217,7 +231,8 @@ impl<SPI: SpiDevice<u8>, IRQ: InputPin, BUSY: InputPin> LLCC68<SPI, IRQ, BUSY> {
             LLCC68OpCode::SetDioIrqParams,
             &[(irq_mask >> 8) as u8, irq_mask as u8, (dio1_mask >> 8) as u8, dio1_mask as u8, 0, 0, 0, 0],
             0,
-        ).await?;
+        )
+        .await?;
         Ok(())
     }
 
@@ -226,8 +241,9 @@ impl<SPI: SpiDevice<u8>, IRQ: InputPin, BUSY: InputPin> LLCC68<SPI, IRQ, BUSY> {
         self.command(
             LLCC68OpCode::SetTx,
             &[(timeout >> 16) as u8, (timeout >> 8) as u8, timeout as u8],
-            0
-        ).await?;
+            0,
+        )
+        .await?;
         Ok(())
     }
 
@@ -237,7 +253,8 @@ impl<SPI: SpiDevice<u8>, IRQ: InputPin, BUSY: InputPin> LLCC68<SPI, IRQ, BUSY> {
             LLCC68OpCode::SetRx,
             &[(timeout >> 16) as u8, (timeout >> 8) as u8, timeout as u8],
             0,
-        ).await?;
+        )
+        .await?;
         Ok(())
     }
 
@@ -252,8 +269,10 @@ impl<SPI: SpiDevice<u8>, IRQ: InputPin, BUSY: InputPin> LLCC68<SPI, IRQ, BUSY> {
             TransmitPower::P20dBm => (0x03, 0x05),
             TransmitPower::P22dBm => (0x04, 0x07),
         };
-        self.command(LLCC68OpCode::SetPaConfig, &[duty_cycle, hp_max, 0x00, 0x01], 0).await?;
-        self.command(LLCC68OpCode::SetTxParams, &[22, RAMP_TIME as u8], 0).await?;
+        self.command(LLCC68OpCode::SetPaConfig, &[duty_cycle, hp_max, 0x00, 0x01], 0)
+            .await?;
+        self.command(LLCC68OpCode::SetTxParams, &[22, RAMP_TIME as u8], 0)
+            .await?;
 
         // workaround to prevent overly protective power clamping (chapter 15.2, p. 97)
         let tx_clamp_config = self.read_register(0x08d8).await?;
@@ -263,7 +282,8 @@ impl<SPI: SpiDevice<u8>, IRQ: InputPin, BUSY: InputPin> LLCC68<SPI, IRQ, BUSY> {
     }
 
     pub async fn switch_to_rx(&mut self) -> Result<(), RadioError<SPI::Error>> {
-        self.set_lora_packet_params(12, true, RX_PACKET_SIZE, true, false).await?;
+        self.set_lora_packet_params(12, true, RX_PACKET_SIZE, true, false)
+            .await?;
         self.set_rx_mode(0).await?;
         Ok(())
     }
@@ -276,7 +296,8 @@ impl<SPI: SpiDevice<u8>, IRQ: InputPin, BUSY: InputPin> LLCC68<SPI, IRQ, BUSY> {
         let int = frequency / PLL_STEP_SCALED;
         let frac = frequency / (int * PLL_STEP_SCALED);
 
-        let pll = (int << PLL_STEP_SHIFT_AMOUNT) + ((frac << PLL_STEP_SHIFT_AMOUNT) + (PLL_STEP_SCALED >> 1)) / PLL_STEP_SCALED;
+        let pll = (int << PLL_STEP_SHIFT_AMOUNT)
+            + ((frac << PLL_STEP_SHIFT_AMOUNT) + (PLL_STEP_SCALED >> 1)) / PLL_STEP_SCALED;
 
         let params = [(pll >> 24) as u8, (pll >> 16) as u8, (pll >> 8) as u8, pll as u8];
         self.command(LLCC68OpCode::SetRfFrequency, &params, 0).await?;
@@ -299,11 +320,12 @@ impl<SPI: SpiDevice<u8>, IRQ: InputPin, BUSY: InputPin> LLCC68<SPI, IRQ, BUSY> {
             self.write_register(0x0889, reg & 0xfb).await?;
         }
 
-        self.set_lora_packet_params(12, true, TX_PACKET_SIZE, true, false).await?;
+        self.set_lora_packet_params(12, true, TX_PACKET_SIZE, true, false)
+            .await?;
         const CMD_SIZE: usize = (TX_PACKET_SIZE as usize) + 1;
         let mut params: [u8; CMD_SIZE] = [0x00; CMD_SIZE];
         params[0] = TX_BASE_ADDRESS;
-        params[1..(msg.len()+1)].copy_from_slice(&msg);
+        params[1..(msg.len() + 1)].copy_from_slice(&msg);
         self.command(LLCC68OpCode::WriteBuffer, &params, 0).await?;
         self.set_tx_mode(TRANSMISSION_TIMEOUT_MS * 1000).await?;
 
@@ -319,7 +341,8 @@ impl<SPI: SpiDevice<u8>, IRQ: InputPin, BUSY: InputPin> LLCC68<SPI, IRQ, BUSY> {
         // Get IRQ status to allow checking for CrcErr
         #[cfg(feature = "gcs")]
         let irq_status = self
-            .command(LLCC68OpCode::GetIrqStatus, &[], 3).await
+            .command(LLCC68OpCode::GetIrqStatus, &[], 3)
+            .await
             .map(|r| ((r[1] as u16) << 8) + (r[2] as u16))
             .unwrap_or(0);
 
@@ -331,9 +354,9 @@ impl<SPI: SpiDevice<u8>, IRQ: InputPin, BUSY: InputPin> LLCC68<SPI, IRQ, BUSY> {
         // e.g. [164, 0, 78, 51, 80] instead of [164, 78, 51, 80]
         let packet_status = self.command(LLCC68OpCode::GetPacketStatus, &[], 5).await?;
         let offset = if packet_status[1] == 0 { 1 } else { 0 };
-        self.rssi = packet_status[1+offset];
-        self.rssi_signal = packet_status[3+offset];
-        self.snr = packet_status[2+offset] as i8;
+        self.rssi = packet_status[1 + offset];
+        self.rssi_signal = packet_status[3 + offset];
+        self.snr = packet_status[2 + offset] as i8;
 
         // Abort in case of a CRC mismatch
         // Sometimes this seems to trigger unnecessarily, especially for uplink
@@ -349,11 +372,9 @@ impl<SPI: SpiDevice<u8>, IRQ: InputPin, BUSY: InputPin> LLCC68<SPI, IRQ, BUSY> {
         let len = u8::min(rx_buffer_status[1], RX_PACKET_SIZE);
 
         // Read received data
-        let buffer = self.command(
-            LLCC68OpCode::ReadBuffer,
-            &[rx_buffer_status[2]],
-            len as usize + 1,
-        ).await?;
+        let buffer = self
+            .command(LLCC68OpCode::ReadBuffer, &[rx_buffer_status[2]], len as usize + 1)
+            .await?;
 
         self.set_rx_mode(0).await?;
 

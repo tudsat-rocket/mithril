@@ -1,4 +1,4 @@
-use embassy_time::{Timer, Duration};
+use embassy_time::{Duration, Timer};
 use embedded_hal_async::spi::SpiDevice;
 
 use nalgebra::Vector3;
@@ -36,7 +36,7 @@ impl<SPI: SpiDevice<u8>> LSM6<SPI> {
         for _i in 0..10 {
             whoami = imu.read_u8(LSM6RRegister::WhoAmI).await?;
             if whoami == 0x6b {
-                break
+                break;
             }
 
             Timer::after(Duration::from_micros(100)).await;
@@ -48,13 +48,15 @@ impl<SPI: SpiDevice<u8>> LSM6<SPI> {
             info!("LSM6DSR initialized");
         }
 
-        imu.configure_gyroscope(LSM6GyroscopeMode::HighPerformance1660Hz, gyro_scale).await?;
+        imu.configure_gyroscope(LSM6GyroscopeMode::HighPerformance1660Hz, gyro_scale)
+            .await?;
 
         imu.configure_accelerometer(
             LSM6AccelerometerMode::HighPerformance1660Hz,
             accel_scale,
             false, // TODO
-        ).await?;
+        )
+        .await?;
 
         Ok(imu)
     }
@@ -86,8 +88,14 @@ impl<SPI: SpiDevice<u8>> LSM6<SPI> {
 
         // rotate values to match vehicle coordinate system (invert x, swap y and z)
         // and convert to m/s^2 and deg/s
-        self.gyro = Some(self.gyro_scale.scale_raw_values(Vector3::new(gyro_x.saturating_neg(), gyro_z, gyro_y)));
-        self.accel = Some(self.accel_scale.scale_raw_values(Vector3::new(accel_x.saturating_neg(), accel_z, accel_y)));
+        self.gyro = Some(
+            self.gyro_scale
+                .scale_raw_values(Vector3::new(gyro_x.saturating_neg(), gyro_z, gyro_y)),
+        );
+        self.accel = Some(
+            self.accel_scale
+                .scale_raw_values(Vector3::new(accel_x.saturating_neg(), accel_z, accel_y)),
+        );
 
         Ok(())
     }

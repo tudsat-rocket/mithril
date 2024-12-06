@@ -18,20 +18,8 @@ use crate::drivers::lora::*;
 
 // The available channels for telemetry, assuming a 500kHz band width.
 const CHANNELS: [u32; 14] = [
-    863_250_000,
-    863_750_000,
-    864_250_000,
-    864_750_000,
-    865_250_000,
-    865_750_000,
-    866_250_000,
-    866_750_000,
-    867_250_000,
-    867_750_000,
-    868_250_000,
-    868_750_000,
-    869_250_000,
-    869_750_000,
+    863_250_000, 863_750_000, 864_250_000, 864_750_000, 865_250_000, 865_750_000, 866_250_000, 866_750_000,
+    867_250_000, 867_750_000, 868_250_000, 868_750_000, 869_250_000, 869_750_000,
 ];
 
 #[cfg(feature = "gcs")]
@@ -71,10 +59,10 @@ pub struct Radio<SPI, IRQ, BUSY> {
     state_time: u32,
     pub transmit_power: TransmitPower,
     transmit_power_setpoint: TransmitPower,
-    #[cfg(feature="gcs")]
+    #[cfg(feature = "gcs")]
     uplink_message: Option<UplinkMessage>,
     last_message_received: u32,
-    #[cfg(feature="gcs")]
+    #[cfg(feature = "gcs")]
     fc_time_offset: i64,
     authentication_key: [u8; 16],
     channels: [bool; CHANNELS.len()],
@@ -93,10 +81,10 @@ impl<SPI: SpiDevice<u8>, IRQ: InputPin, BUSY: InputPin> Radio<SPI, IRQ, BUSY> {
             state_time: 0,
             transmit_power: TransmitPower::P14dBm,
             transmit_power_setpoint: TransmitPower::P14dBm,
-            #[cfg(feature="gcs")]
+            #[cfg(feature = "gcs")]
             uplink_message: None,
             last_message_received: 0,
-            #[cfg(feature="gcs")]
+            #[cfg(feature = "gcs")]
             fc_time_offset: 0,
             authentication_key: [0x00; 16],
             channels: [true; CHANNELS.len()],
@@ -118,11 +106,12 @@ impl<SPI: SpiDevice<u8>, IRQ: InputPin, BUSY: InputPin> Radio<SPI, IRQ, BUSY> {
         self.state_time = self.time;
     }
 
-    fn generate_sequence(&mut self, channels: [bool; CHANNELS.len()], binding_phrase: &String<64>) -> Option<[usize; CHANNELS.len()]> {
-        let mut available: Vec<_, 16> = channels.iter()
-            .enumerate()
-            .filter_map(|(i, x)| x.then(|| i))
-            .collect();
+    fn generate_sequence(
+        &mut self,
+        channels: [bool; CHANNELS.len()],
+        binding_phrase: &String<64>,
+    ) -> Option<[usize; CHANNELS.len()]> {
+        let mut available: Vec<_, 16> = channels.iter().enumerate().filter_map(|(i, x)| x.then(|| i)).collect();
 
         if available.len() == 0 {
             return None;
@@ -161,21 +150,23 @@ impl<SPI: SpiDevice<u8>, IRQ: InputPin, BUSY: InputPin> Radio<SPI, IRQ, BUSY> {
         // Switch to the correct frequency for the current message interval.
         // On the FC, this is pretty straight forward.
 
-        #[cfg(not(feature="gcs"))]
+        #[cfg(not(feature = "gcs"))]
         let t = self.time;
-        #[cfg(feature="gcs")]
+        #[cfg(feature = "gcs")]
         let t = (self.time as i64).wrapping_add(self.fc_time_offset) as u32;
 
         let message_i = (t / LORA_MESSAGE_INTERVAL) as usize % CHANNELS.len();
-        self.trx.set_frequency(CHANNELS[self.sequence.map(|s| s[message_i]).unwrap_or(0)]).await
+        self.trx
+            .set_frequency(CHANNELS[self.sequence.map(|s| s[message_i]).unwrap_or(0)])
+            .await
     }
 
     fn start_of_current_interval(&self) -> u32 {
         // Returns the start of the current message interval. The result is
         // always in FC time, and is used for message authentication.
-        #[cfg(not(feature="gcs"))]
+        #[cfg(not(feature = "gcs"))]
         let t = self.time;
-        #[cfg(feature="gcs")]
+        #[cfg(feature = "gcs")]
         let t = (self.time as i64).wrapping_add(self.fc_time_offset) as u32;
 
         t.wrapping_sub(t % LORA_MESSAGE_INTERVAL)
@@ -195,7 +186,7 @@ impl<SPI: SpiDevice<u8>, IRQ: InputPin, BUSY: InputPin> Radio<SPI, IRQ, BUSY> {
 
         // Prepend message authentication
         let mut siphasher = SipHasher::new_with_key(&self.authentication_key);
-        #[cfg(feature="gcs")] // only include time for uplink messages, prevents replay attacks
+        #[cfg(feature = "gcs")] // only include time for uplink messages, prevents replay attacks
         siphasher.write(&self.start_of_current_interval().to_be_bytes());
         siphasher.write(&serialized);
         let hash = (siphasher.finish() as TxHmac).to_be_bytes();
@@ -206,7 +197,7 @@ impl<SPI: SpiDevice<u8>, IRQ: InputPin, BUSY: InputPin> Radio<SPI, IRQ, BUSY> {
         Ok(())
     }
 
-    #[cfg(feature="gcs")]
+    #[cfg(feature = "gcs")]
     pub fn queue_uplink_message(&mut self, msg: UplinkMessage) {
         self.uplink_message = Some(msg);
     }
@@ -218,13 +209,14 @@ impl<SPI: SpiDevice<u8>, IRQ: InputPin, BUSY: InputPin> Radio<SPI, IRQ, BUSY> {
         };
 
         let (hmac, serialized) = buffer[1..].split_at_mut(core::mem::size_of::<RxHmac>());
-        let serialized_end = serialized.iter()
+        let serialized_end = serialized
+            .iter()
             .position(|b| *b == 0)
             .map(|i| i + 1)
             .unwrap_or(serialized.len());
 
         let mut siphasher = SipHasher::new_with_key(&self.authentication_key);
-        #[cfg(not(feature="gcs"))] // only include time for uplink messages, prevents replay attacks
+        #[cfg(not(feature = "gcs"))] // only include time for uplink messages, prevents replay attacks
         siphasher.write(&self.start_of_current_interval().to_be_bytes());
         siphasher.write(&serialized[..serialized_end]);
         let correct = (siphasher.finish() as RxHmac).to_be_bytes();
@@ -294,9 +286,9 @@ impl<SPI: SpiDevice<u8>, IRQ: InputPin, BUSY: InputPin> Radio<SPI, IRQ, BUSY> {
 
                     match msg {
                         UplinkMessage::Command(cmd) => Some(cmd),
-                        _ => None
+                        _ => None,
                     }
-                },
+                }
                 Ok(None) => None,
                 Err(e) => {
                     error!("Error receiving message: {:?}", Debug2Format(&e));
@@ -366,7 +358,7 @@ impl<SPI: SpiDevice<u8>, IRQ: InputPin, BUSY: InputPin> Radio<SPI, IRQ, BUSY> {
                         self.transmit_power_setpoint = (tm.transmit_power_and_data_rate & 0x7f).into();
                     }
                 }
-                Ok(None) => {},
+                Ok(None) => {}
                 Err(e) => {
                     error!("Error receiving message: {:?}", Debug2Format(&e));
                 }
