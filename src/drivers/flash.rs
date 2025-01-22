@@ -24,6 +24,7 @@ impl<SPI: SpiDevice> W25Q<SPI> {
         let (name, size_mbit) = match (man_id, dev_id) {
             (0xef, 0x4019) => ("W25Q256JV-IQ", 256),
             (0xef, 0x7019) => ("W25Q256JV-IM", 256),
+            (0xef, 0x4018) => ("W25Q128JV-IQ", 128),
             _ => ("unknown", 0),
         };
 
@@ -62,7 +63,8 @@ impl<SPI: SpiDevice> W25Q<SPI> {
         }
 
         let address = address.to_be_bytes();
-        self.command(W25OpCode::ReadData4BAddress, &address, len as usize).await
+        //self.command(W25OpCode::ReadData4BAddress, &address, len as usize).await
+        self.command(W25OpCode::ReadData, &address[1..4], len as usize).await
     }
 
     pub async fn write(&mut self, address: usize, data: &[u8]) -> Result<(), FlashError<SPI::Error>> {
@@ -71,8 +73,8 @@ impl<SPI: SpiDevice> W25Q<SPI> {
         }
 
         self.command(W25OpCode::WriteEnable, &[], 0).await?;
-        let cmd = [&address.to_be_bytes(), data].concat();
-        self.command(W25OpCode::PageProgram4BAddress, &cmd, 0).await?;
+        let cmd = [&address.to_be_bytes()[1..4], data].concat();
+        self.command(W25OpCode::PageProgram, &cmd, 0).await?;
 
         let t = Instant::now();
         while t.elapsed().as_micros() < 1000 && self.is_busy().await {}
@@ -82,7 +84,7 @@ impl<SPI: SpiDevice> W25Q<SPI> {
 
     pub async fn erase_sector(&mut self, address: u32) -> Result<(), FlashError<SPI::Error>> {
         self.command(W25OpCode::WriteEnable, &[], 0).await?;
-        self.command(W25OpCode::SectorErase4KB4BAddress, &address.to_be_bytes(), 0).await?;
+        self.command(W25OpCode::SectorErase4KB, &address.to_be_bytes()[1..4], 0).await?;
         Ok(())
     }
 }

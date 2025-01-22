@@ -48,7 +48,7 @@ impl UsbHandle {
         let flash_downlink_channel = FLASH_DOWNLINK_CHANNEL.init(Channel::new());
 
         let mut config = embassy_stm32::usb_otg::Config::default();
-        config.vbus_detection = false;
+        config.vbus_detection = true;
 
         let driver = Driver::new_fs(peripheral, Irqs, pin_dm, pin_dp, EP_OUT_BUFFER.init([0; 256]), config);
 

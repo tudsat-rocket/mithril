@@ -12,7 +12,7 @@ use num_traits::Float;
 use shared_types::*;
 
 use Semitone::*;
-use crate::drivers::sensors::BatteryStatus;
+//use crate::drivers::sensors::BatteryStatus;
 
 #[allow(dead_code)]
 const STARTUP: [Note; 6] = [
@@ -274,25 +274,25 @@ impl<TIM: CaptureCompare16bitInstance> Buzzer<TIM> {
         }
     }
 
-    pub fn tick(&mut self, time: u32, battery_status: Option<BatteryStatus>) {
-        if let Some(status) = battery_status{
-            match status {
-                BatteryStatus::Low => {
-                    self.change_melody(time,Some(&WARNING_MELODY));
-                    self.nba_already_played = false;
-                    self.is_warning = true;
-                }
-                BatteryStatus::High => {
-                    self.nba_already_played = false;
-                }
-                BatteryStatus::NoBatteryAttached if !self.nba_already_played && !self.is_warning =>{
-                    self.change_melody(time, Some(&NO_BATTERY_ATTACHED_MELODY));
-                    self.is_warning = true;
-                    self.nba_already_played = true;
-                }
-                _ => {}
-            }
-        }
+    pub fn tick(&mut self, time: u32, battery_status: Option<bool>) {
+        //if let Some(status) = battery_status{
+        //    match status {
+        //        BatteryStatus::Low => {
+        //            self.change_melody(time,Some(&WARNING_MELODY));
+        //            self.nba_already_played = false;
+        //            self.is_warning = true;
+        //        }
+        //        BatteryStatus::High => {
+        //            self.nba_already_played = false;
+        //        }
+        //        BatteryStatus::NoBatteryAttached if !self.nba_already_played && !self.is_warning =>{
+        //            self.change_melody(time, Some(&NO_BATTERY_ATTACHED_MELODY));
+        //            self.is_warning = true;
+        //            self.nba_already_played = true;
+        //        }
+        //        _ => {}
+        //    }
+        //}
 
         if let Some(melody) = self.current_melody {
             if self.has_note_just_finished(time, melody.get(self.current_index)){

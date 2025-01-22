@@ -1,5 +1,6 @@
 [target.thumbv7em-none-eabihf]
-runner = "probe-rs run --chip STM32F401RCTx --catch-hardfault --always-print-stacktrace"
+#runner = "probe-rs run --chip STM32F401RCTx --catch-hardfault --always-print-stacktrace"
+runner = "probe-rs run --chip STM32H743VGTx --catch-hardfault --always-print-stacktrace"
 rustflags = [
     "-C", "linker=flip-link",
     "-C", "link-arg=-Tlink.x",

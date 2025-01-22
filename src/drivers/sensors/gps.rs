@@ -15,7 +15,8 @@ use defmt::*;
 use shared_types::*;
 
 bind_interrupts!(struct Irqs {
-    USART2 => embassy_stm32::usart::InterruptHandler<embassy_stm32::peripherals::USART2>;
+    //USART2 => embassy_stm32::usart::InterruptHandler<embassy_stm32::peripherals::USART2>;
+    UART4 => embassy_stm32::usart::InterruptHandler<embassy_stm32::peripherals::UART4>;
 });
 
 const DESIRED_BAUD_RATE: u32 = 115_200;
@@ -27,7 +28,7 @@ const DESIRED_BAUD_RATE_MESSAGE: &'static str = "$PUBX,41,1,0007,0003,115200,0*1
 static CHANNEL: StaticCell<Channel::<CriticalSectionRawMutex, GPSDatum, 5>> = StaticCell::new();
 
 pub struct GPS {
-    uart: Uart<'static, USART2, DMA1_CH6, DMA1_CH5>,
+    uart: Uart<'static, UART4, DMA1_CH6, DMA1_CH5>,
     sender: Sender<'static, CriticalSectionRawMutex, GPSDatum, 5>,
 }
 
@@ -49,7 +50,7 @@ pub async fn run(mut gps: GPS) -> ! {
 
 impl GPS {
     // TODO: dma channels
-    pub fn init(p: USART2, tx: PA3, rx: PA2, tx_dma: DMA1_CH6, rx_dma: DMA1_CH5) -> (GPS, GPSHandle) {
+    pub fn init(p: UART4, tx: PD0, rx: PD1, tx_dma: DMA1_CH6, rx_dma: DMA1_CH5) -> (GPS, GPSHandle) {
         let channel = CHANNEL.init(Channel::new());
 
         let mut uart_config = embassy_stm32::usart::Config::default();

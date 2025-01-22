@@ -18,24 +18,26 @@ use state_estimator::StateEstimator;
 use shared_types::*;
 
 use crate::buzzer::Buzzer as BuzzerDriver;
-use crate::can::*;
+use crate::{can::*, FLIGHT_MODE_SIGNAL};
 use crate::drivers::sensors::*;
 use crate::lora::*;
 use crate::flash::*;
 use crate::usb::*;
 
-type SpiInst = Spi<'static, SPI1, DMA2_CH3, DMA2_CH2>;
-type Imu = LSM6<SpiDevice<'static, CriticalSectionRawMutex, SpiInst, Output<'static, PB15>>>;
-type Accelerometer = H3LIS331DL<SpiDevice<'static, CriticalSectionRawMutex, SpiInst, Output<'static, PA4>>>;
-type Magnetometer = LIS3MDL<SpiDevice<'static, CriticalSectionRawMutex, SpiInst, Output<'static, PB10>>>;
-type Barometer = MS5611<SpiDevice<'static, CriticalSectionRawMutex, SpiInst, Output<'static, PC6>>>;
-type Power = PowerMonitor<ADC1, PB0, PC5, PC4>;
+type Spi1Inst = Spi<'static, SPI1, DMA2_CH3, DMA2_CH2>;
+#[cfg(feature = "stigma")]
+type Spi2Inst = Spi<'static, SPI2, DMA1_CH4, DMA1_CH3>;
+type Imu = LSM6<SpiDevice<'static, CriticalSectionRawMutex, Spi1Inst, Output<'static, PD4>>>;
+type Accelerometer = H3LIS331DL<SpiDevice<'static, CriticalSectionRawMutex, Spi1Inst, Output<'static, PD9>>>;
+type Magnetometer = LIS3MDL<SpiDevice<'static, CriticalSectionRawMutex, Spi1Inst, Output<'static, PD5>>>;
+type Barometer = MS5611<SpiDevice<'static, CriticalSectionRawMutex, Spi1Inst, Output<'static, PD2>>>;
+//type Power = PowerMonitor<ADC1, PB0, PC5, PC4>;
 
-type RadioHandle = Radio<SpiDevice<'static, CriticalSectionRawMutex, Spi<'static, SPI1, DMA2_CH3, DMA2_CH2>, Output<'static, PA1>>, Input<'static, PC0>,Input<'static, PC1>>;
+//type RadioHandle = Radio<SpiDevice<'static, CriticalSectionRawMutex, Spi<'static, SPI1, DMA2_CH3, DMA2_CH2>, Output<'static, PA1>>, Input<'static, PC0>,Input<'static, PC2>>;
 
-type LEDs = (Output<'static, PC13>, Output<'static, PC14>, Output<'static, PC15>);
-type Buzzer = BuzzerDriver<TIM3>;
-type Recovery = (Output<'static, PC8>, Output<'static, PC9>);
+type LEDs = (Output<'static, PA8>, Output<'static, PA10>, Output<'static, PA15>);
+//type Buzzer = BuzzerDriver<TIM3>;
+//type Recovery = (Output<'static, PC8>, Output<'static, PC9>);
 
 const MAIN_LOOP_FREQUENCY: Hertz = Hertz::hz(1000);
 
@@ -47,16 +49,15 @@ pub struct Vehicle {
     mag: Magnetometer,
     baro: Barometer,
     gps: GPSHandle,
-    power: Power,
+    //power: Power,
     // other peripherals
     usb: UsbHandle,
-    radio: RadioHandle,
+    //radio: RadioHandle,
     flash: FlashHandle,
-    can: CanHandle,
+    //can: CanHandle,
     // outputs
-    leds: LEDs,
-    buzzer: Buzzer,
-    recovery: Recovery,
+    //buzzer: Buzzer,
+    //recovery: Recovery,
     // vehicle state
     state_estimator: StateEstimator,
     mode: FlightMode,
@@ -128,20 +129,20 @@ impl Into<VehicleState> for &mut Vehicle {
             latitude: self.state_estimator.latitude(),
             longitude: self.state_estimator.longitude(),
 
-            gyroscope: self.imu.gyroscope(),
+            gyroscope1: self.imu.gyroscope(),
             accelerometer1: self.imu.accelerometer(),
-            accelerometer2: self.acc.accelerometer(),
+            accelerometer_highg: self.acc.accelerometer(),
             magnetometer: self.mag.magnetometer(),
-            pressure_baro: self.baro.pressure(),
-            altitude_baro: self.baro.altitude(),
-            temperature_baro: self.baro.temperature(),
+            pressure_baro1: self.baro.pressure(),
+            altitude_baro1: self.baro.altitude(),
+            temperature_baro1: self.baro.temperature(),
 
-            charge_voltage: self.power.charge_voltage(),
-            battery_voltage: self.power.battery_voltage(),
-            current: self.power.battery_current(),
+            //charge_voltage: self.power.charge_voltage(),
+            //battery_voltage: self.power.battery_voltage(),
+            //current: self.power.battery_current(),
 
-            lora_rssi: Some(self.radio.trx.rssi), // TODO
-            transmit_power: Some(self.radio.transmit_power),
+            //lora_rssi: Some(self.radio.trx.rssi), // TODO
+            //transmit_power: Some(self.radio.transmit_power),
             data_rate: Some(self.data_rate),
 
             cpu_utilization: Some(self.loop_runtime),
@@ -191,7 +192,7 @@ impl Into<VehicleState> for &mut Vehicle {
 }
 
 #[embassy_executor::task]
-pub async fn run(mut vehicle: Vehicle, mut iwdg: IndependentWatchdog<'static, IWDG>) -> ! {
+pub async fn run(mut vehicle: Vehicle, mut iwdg: IndependentWatchdog<'static, IWDG1>) -> ! {
     let mut ticker = Ticker::every(Duration::from_micros(1_000_000 / MAIN_LOOP_FREQUENCY.0 as u64));
     defmt::info!("Starting main loop.");
     loop {
@@ -208,18 +209,17 @@ impl Vehicle {
         mut mag: Magnetometer,
         baro: Barometer,
         gps: GPSHandle,
-        power: Power,
+        //power: Power,
         usb: UsbHandle,
-        mut radio: RadioHandle,
+        //mut radio: RadioHandle,
         flash: FlashHandle,
-        can: CanHandle,
-        leds: LEDs,
-        mut buzzer: Buzzer,
-        recovery: Recovery,
+        //can: CanHandle,
+        //mut buzzer: Buzzer,
+        //recovery: Recovery,
         settings: Settings,
     ) -> Self {
-        buzzer.apply_settings(&settings.drogue_output_settings, &settings.main_output_settings);
-        radio.apply_settings(&settings.lora);
+        //buzzer.apply_settings(&settings.drogue_output_settings, &settings.main_output_settings);
+        //radio.apply_settings(&settings.lora);
         imu.set_offsets(settings.gyro_offset, settings.acc_offset);
         acc.set_offset(settings.acc2_offset);
         mag.set_offset(settings.mag_offset);
@@ -234,16 +234,15 @@ impl Vehicle {
             mag,
             baro,
             gps,
-            power,
+            //power,
 
             usb,
-            radio,
+            //radio,
             flash,
-            can,
+            //can,
 
-            leds,
-            buzzer,
-            recovery,
+            //buzzer,
+            //recovery,
 
             state_estimator: StateEstimator::new(MAIN_LOOP_FREQUENCY.0 as f32, settings.clone()),
             mode: FlightMode::Idle,
@@ -287,60 +286,60 @@ impl Vehicle {
         self.acc.tick().await;
         self.mag.tick().await;
         self.baro.tick().await;
-        self.power.tick();
+        //self.power.tick();
 
         // Handle incoming CAN messages
-        if let Some(msg) = self.can.receive() {
-            self.handle_can_bus_message(&msg);
-            match msg {
-                FcReceivedCanBusMessage::BatteryTelemetry(_id, bat_msg) => {
-                    self.power.handle_battery_can_msg(bat_msg)
-                },
-                FcReceivedCanBusMessage::IoBoardSensor(role, id, sensor_msg) => {
-                    match (role, id) {
-                        (IoBoardRole::Acs, 0) => {
-                            self.acs_tank_pressure = self.settings.acs_tank_pressure_sensor_settings.apply(sensor_msg.i2c_sensors[0]).map(|v| (self.time, v));
-                            self.acs_regulator_pressure = self.settings.acs_regulator_pressure_sensor_settings.apply(sensor_msg.i2c_sensors[1]).map(|v| (self.time, v));
-                            self.acs_accel_valve_pressure = self.settings.acs_accel_valve_pressure_sensor_settings.apply(sensor_msg.i2c_sensors[2]).map(|v| (self.time, v));
-                            self.acs_decel_valve_pressure = self.settings.acs_decel_valve_pressure_sensor_settings.apply(sensor_msg.i2c_sensors[3]).map(|v| (self.time, v));
-                        },
-                        (IoBoardRole::Recovery, 0) => {
-                            self.recovery_pressure = self.settings.recovery_pressure_sensor_settings.apply(sensor_msg.i2c_sensors[0]).map(|v| (self.time, v));
-                            self.main_release_sensor = sensor_msg.i2c_sensors[3].map(|(v, _)| (self.time, (v & 0b1) == 0));
-                        },
-                        _ => {}
-                    }
-                },
-                FcReceivedCanBusMessage::IoBoardPower(role, power_msg) => {
-                    use num_traits::Float;
-                    const B: f32 = 3380.0;
-                    const B_INV: f32 = 1.0 / B;
-                    const T0_INV: f32 = 1.0 / (273.15 + 25.0);
-                    const R0: f32 = 10_000.0;
-                    let r = power_msg.thermistor_resistance as f32;
-                    let temperature = 1.0 / (T0_INV + B_INV * (r / R0).ln());
-                    let temperature = ((temperature - 273.15) * 2.0) as i8;
-                    let msg = (
-                        self.time,
-                        power_msg.output_voltage,
-                        power_msg.output_current,
-                        temperature
-                    );
+        //if let Some(msg) = self.can.receive() {
+        //    self.handle_can_bus_message(&msg);
+        //    match msg {
+        //        FcReceivedCanBusMessage::BatteryTelemetry(_id, bat_msg) => {
+        //            //self.power.handle_battery_can_msg(bat_msg)
+        //        },
+        //        FcReceivedCanBusMessage::IoBoardSensor(role, id, sensor_msg) => {
+        //            match (role, id) {
+        //                (IoBoardRole::Acs, 0) => {
+        //                    self.acs_tank_pressure = self.settings.acs_tank_pressure_sensor_settings.apply(sensor_msg.i2c_sensors[0]).map(|v| (self.time, v));
+        //                    self.acs_regulator_pressure = self.settings.acs_regulator_pressure_sensor_settings.apply(sensor_msg.i2c_sensors[1]).map(|v| (self.time, v));
+        //                    self.acs_accel_valve_pressure = self.settings.acs_accel_valve_pressure_sensor_settings.apply(sensor_msg.i2c_sensors[2]).map(|v| (self.time, v));
+        //                    self.acs_decel_valve_pressure = self.settings.acs_decel_valve_pressure_sensor_settings.apply(sensor_msg.i2c_sensors[3]).map(|v| (self.time, v));
+        //                },
+        //                (IoBoardRole::Recovery, 0) => {
+        //                    self.recovery_pressure = self.settings.recovery_pressure_sensor_settings.apply(sensor_msg.i2c_sensors[0]).map(|v| (self.time, v));
+        //                    self.main_release_sensor = sensor_msg.i2c_sensors[3].map(|(v, _)| (self.time, (v & 0b1) == 0));
+        //                },
+        //                _ => {}
+        //            }
+        //        },
+        //        FcReceivedCanBusMessage::IoBoardPower(role, power_msg) => {
+        //            use num_traits::Float;
+        //            const B: f32 = 3380.0;
+        //            const B_INV: f32 = 1.0 / B;
+        //            const T0_INV: f32 = 1.0 / (273.15 + 25.0);
+        //            const R0: f32 = 10_000.0;
+        //            let r = power_msg.thermistor_resistance as f32;
+        //            let temperature = 1.0 / (T0_INV + B_INV * (r / R0).ln());
+        //            let temperature = ((temperature - 273.15) * 2.0) as i8;
+        //            let msg = (
+        //                self.time,
+        //                power_msg.output_voltage,
+        //                power_msg.output_current,
+        //                temperature
+        //            );
 
-                    match role {
-                        IoBoardRole::Acs => { self.last_acs_message = Some(msg); }
-                        IoBoardRole::Recovery => { self.last_recovery_message = Some(msg); }
-                        IoBoardRole::Payload => { self.last_payload_message = Some(msg); }
-                    }
-                },
-                FcReceivedCanBusMessage::FinBoardData(fin, _, _) => {
-                    let fin = fin as usize;
-                    if fin < self.last_fin_message.len() {
-                        self.last_fin_message[fin] = Some(self.time);
-                    }
-                },
-            }
-        }
+        //            match role {
+        //                IoBoardRole::Acs => { self.last_acs_message = Some(msg); }
+        //                IoBoardRole::Recovery => { self.last_recovery_message = Some(msg); }
+        //                IoBoardRole::Payload => { self.last_payload_message = Some(msg); }
+        //            }
+        //        },
+        //        FcReceivedCanBusMessage::FinBoardData(fin, _, _) => {
+        //            let fin = fin as usize;
+        //            if fin < self.last_fin_message.len() {
+        //                self.last_fin_message[fin] = Some(self.time);
+        //            }
+        //        },
+        //    }
+        //}
 
         // Update state estimator
         self.state_estimator.update(
@@ -355,7 +354,8 @@ impl Vehicle {
         );
 
         // Switch to new mode if necessary
-        let arm_voltage = self.power.arm_voltage().unwrap_or(0);
+        //let arm_voltage = self.power.arm_voltage().unwrap_or(0);
+        let arm_voltage = 0;
         if let Some(fm) = self.state_estimator.new_mode(arm_voltage) {
             self.switch_mode(fm);
         }
@@ -378,27 +378,22 @@ impl Vehicle {
         }
 
         // ... and via LoRa
-        if let Some(cmd) = self.radio.tick(self.time.0).await {
-            self.handle_command(cmd).await;
-        }
+        //if let Some(cmd) = self.radio.tick(self.time.0).await {
+        //    self.handle_command(cmd).await;
+        //}
 
         // Set output according to flight mode
         let elapsed = self.state_estimator.time_in_mode();
         let drogue_high = self.mode == FlightMode::RecoveryDrogue && self.settings.drogue_output_settings.currently_high(elapsed);
         let main_high = self.mode == FlightMode::RecoveryMain && self.settings.main_output_settings.currently_high(elapsed);
-        self.recovery.0.set_level(drogue_high.into());
-        self.recovery.1.set_level(main_high.into());
-
-        let (r,y,g) = self.mode.led_state(self.time.0);
-        self.leds.0.set_level((!r).into());
-        self.leds.1.set_level((!y).into());
-        self.leds.2.set_level((!g).into());
+        //self.recovery.0.set_level(drogue_high.into());
+        //self.recovery.1.set_level(main_high.into());
 
         // Send valve commands via CAN bus
         self.transmit_output_commands();
 
         // Update buzzer
-        self.buzzer.tick(self.time.0, self.power.battery_status());
+        //self.buzzer.tick(self.time.0, self.power.battery_status());
 
         // Send telemetry via USB
         if let Some(msg) = self.next_usb_telem() {
@@ -406,11 +401,11 @@ impl Vehicle {
         }
 
         // Send telemetry via Lora
-        if let Some(msg) = self.next_lora_telem() {
-            if let Err(e) = self.radio.send(msg).await {
-                error!("Failed to send downlink message: {:?}", Debug2Format(&e));
-            }
-        }
+        //if let Some(msg) = self.next_lora_telem() {
+        //    if let Err(e) = self.radio.send(msg).await {
+        //        error!("Failed to send downlink message: {:?}", Debug2Format(&e));
+        //    }
+        //}
 
         // Store data in flash
         self.flash.tick().await;
@@ -478,7 +473,7 @@ impl Vehicle {
             outputs[3] = decel;
             let msg = IoBoardOutputMessage { outputs };
             let (id, msg) = msg.to_frame(CanBusMessageId::IoBoardCommand(IoBoardRole::Acs, 0));
-            self.can.transmit(id, msg);
+            //self.can.transmit(id, msg);
         }
 
         // Recovery cameras
@@ -490,7 +485,7 @@ impl Vehicle {
             outputs[3] = self.camera_state[1];
             let msg = IoBoardOutputMessage { outputs };
             let (id, msg) = msg.to_frame(CanBusMessageId::IoBoardCommand(IoBoardRole::Recovery, 0));
-            self.can.transmit(id, msg);
+            //self.can.transmit(id, msg);
         }
 
         // Payload cameras
@@ -502,7 +497,7 @@ impl Vehicle {
             outputs[3] = self.camera_state[2];
             let msg = IoBoardOutputMessage { outputs };
             let (id, msg) = msg.to_frame(CanBusMessageId::IoBoardCommand(IoBoardRole::Payload, 0));
-            self.can.transmit(id, msg);
+            //self.can.transmit(id, msg);
         }
     }
 
@@ -518,7 +513,7 @@ impl Vehicle {
         };
 
         let (id, msg) = msg.to_frame(CanBusMessageId::TelemetryBroadcast(0));
-        self.can.transmit(id, msg);
+        //self.can.transmit(id, msg);
     }
 
     async fn handle_command(&mut self, cmd: Command) {
@@ -527,7 +522,7 @@ impl Vehicle {
             Command::Reboot => cortex_m::peripheral::SCB::sys_reset(),
             Command::RebootToBootloader => {},
             Command::SetFlightMode(fm) => self.switch_mode(fm),
-            Command::SetTransmitPower(txp) => self.radio.set_transmit_power(txp),
+            //Command::SetTransmitPower(txp) => self.radio.set_transmit_power(txp),
             Command::SetDataRate(dr) => self.data_rate = dr,
             Command::SetAcsMode(am) => self.acs_mode = am,
             Command::SetAcsValveState(vs) => if self.acs_mode != AcsMode::Disabled {
@@ -543,6 +538,7 @@ impl Vehicle {
             },
             Command::SetIoModuleOutput(_role, _output_id, _state) => {},
             Command::EraseFlash => { let _ = self.flash.erase(); },
+            _ => {},
         }
     }
 
@@ -553,7 +549,7 @@ impl Vehicle {
 
         // We are going to or beyond Armed, switch to max tx power and arm ACS
         if new_mode >= FlightMode::Armed && self.mode < FlightMode::Armed {
-            self.radio.set_max_transmit_power();
+            //self.radio.set_max_transmit_power();
             self.acs_mode = AcsMode::Auto;
         }
 
@@ -562,7 +558,8 @@ impl Vehicle {
         }
 
         self.mode = new_mode;
-        self.buzzer.switch_mode(self.time.0, new_mode);
+        //self.buzzer.switch_mode(self.time.0, new_mode);
+        FLIGHT_MODE_SIGNAL.signal(self.mode);
     }
 
     // TODO: replace these with a more elegant system
